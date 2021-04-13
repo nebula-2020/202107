@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="../css/def.css">
+    <title>Document</title>
+
+    <style type="text/css">
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        #container {
+            position: absolute;
+            display: inline-block;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #screen {
+            display: inline-block;
+            height: 540px;
+            width: 960px;
+            overflow: hidden;
+            background-color: #88ccff;
+        }
+
+        #screen * {
+            position: absolute;
+            display: inline-block;
+        }
+
+        #player {
+            overflow: visible;
+            line-height: 0;
+        }
+
+        #player img {
+            width: 140%;
+            height: 140%;
+            left: -20%;
+            top: -20%;
+            transform: none;
+            position: absolute;
+        }
+
+        *[name='wall'] {
+            background: #000;
+        }
+
+        *[name='wall'] * {
+            border: 4px solid #000;
+            object-fit: fill;
+            background: url('../images/wall.svg');
+            background-size: contain;
+            background-repeat: no-repeat repeat;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="screen">
+            <div id="player">
+                <img src="../images/player.svg">
+            </div>
+        </div>
+    </div>
+</body>
+<script>
+    document.οncοntextmenu = function () { return false; }
+    const SCREEN_WIDTH = 960;
+    const SCREEN_HEIGHT = 540;
+    const DIRECTION_EFFECT = -27;
+    const DIRECTION_ADDEND = .25;
+    const SPEED = 24;
+    const RATE = 10;
+    const WALL_WIDTH = 80;
+    const G = 10;
+    const WALL_TAG = 'wall';
+    const UNIT = 'px';
+    const PLAYER_WIDTH = 444.4;
+    const PLAYER_HEIGHT = 101.6;
+    const PLAYER_SCALE = 0.4;
+    const MIN_WALL_DELAY = 4000;
+    const DEF_WALL_DELAY = 7500;
+    const DIFFICULT = 40;
+    var screen = document.getElementById('screen');
+    screen.style.width = SCREEN_WIDTH + UNIT;
+    screen.style.height = SCREEN_HEIGHT + UNIT;
+    var playerEle = document.getElementById('player');
+    playerEle.style.width = (PLAYER_WIDTH * PLAYER_SCALE) + UNIT;
+    playerEle.style.height = (PLAYER_HEIGHT * PLAYER_SCALE) + UNIT;
+    var player = { x: 200, y: SCREEN_HEIGHT / 3, d: 0 };
+    var keyDown = false;
+    var game = null;
+    var living;
+    var wallDelay;
+    var wallTime;
+    var score;
+    document.onmousedown = function (event) {
+        var e = event || window.event || arguments.callee.caller.arguments[0];
+        if (e && e.button) {
+            if (game) {
+                keyDown = true
+            }
+        }
+    }
+    document.onkeydown = function (event) {
+        var e = event || window.event || arguments.callee.caller.arguments[0];
+        if (e && e.keyCode)
+            if (e.keyCode == 27) { // 按 Esc 
+                if (game) {
+                    clearInterval(game);
+                }
+            } else {
+                keyDown = true
+            }
+    };
+    function resize() {
+        let scaleX = document.body.clientWidth / SCREEN_WIDTH;
+        let scaleY = document.body.clientHeight / SCREEN_HEIGHT;
+        let scale = (SCREEN_HEIGHT / SCREEN_WIDTH > document.body.clientHeight / document.body.clientWidth) ? scaleY : scaleX;
+        screen.style.transform = 'scale(' + scale + ',' + scale + ')';
+    }
+    window.onresize = function () { resize(); };
+    resize();
+    function init() {
+        player = { x: 200, y: SCREEN_HEIGHT / 3, d: 0 };
+        score = 0;
+        wallTime = 0;
+        wallDelay = DEF_WALL_DELAY;
+        living = true;
+        var walls = document.getElementsByName(WALL_TAG);
+        while (walls.length > 0) {
+            walls = document.getElementsByName(WALL_TAG);
+            screen.removeChild(walls[0]);
+        }
+    }
+    init();
+    function createWall() {
+        var height = 150;
+        var mid = Math.random() * (SCREEN_HEIGHT - height);
+
+        var top = mid - height / 2;
+        var bottom = mid + height / 2;
+
+        var heightUp = top;
+        var heightBottom = SCREEN_HEIGHT - bottom;
+
+        var topWall = document.createElement('div');
+        topWall.style.height = heightUp + UNIT;
+        topWall.style.width = WALL_WIDTH + UNIT;
+        topWall.style.top = 0 + UNIT;
+        topWall.style.left = SCREEN_WIDTH + UNIT;
+        topWall.setAttribute('name', WALL_TAG);
+
+        var bottomWall = document.createElement('div');
+        bottomWall.style.height = heightBottom + UNIT;
+        bottomWall.style.width = WALL_WIDTH + UNIT;
+        bottomWall.style.top = bottom + UNIT;
+        bottomWall.style.left = SCREEN_WIDTH + UNIT;
+        bottomWall.setAttribute('name', WALL_TAG);
+
+        var topWallImg = document.createElement('img');
+        topWallImg.height = heightUp;
+        topWallImg.width = WALL_WIDTH;
+        topWall.appendChild(topWallImg)
+
+        var bottomWallImg = document.createElement('img');
+        bottomWallImg.height = heightBottom;
+        bottomWallImg.width = WALL_WIDTH;
+        bottomWall.appendChild(bottomWallImg);
+
+        screen.appendChild(topWall);
+        screen.appendChild(bottomWall);
+
+    }
+    function playerControl(event) {
+        if (event) {
+            player.d = DIRECTION_EFFECT / RATE;
+        } else {
+            player.y += G / RATE * Math.abs(player.d) * player.d / 2;
+            player.d += DIRECTION_ADDEND / RATE;
+        }
+    }
+    function wallMove() {
+        var walls = document.getElementsByName(WALL_TAG);
+        for (let i = 0, len = walls.length; i < len; i++) {
+            let left = Number(walls[i].style.left.replace(UNIT, ''));
+            left -= SPEED / RATE
+            walls[i].style.left = left + UNIT;
+        }
+    }
+    function getRect(ele) {
+        let l = Number(ele.style.left.replace(UNIT, ''));
+        let r = l + Number(ele.style.width.replace(UNIT, ''));
+        let t = Number(ele.style.top.replace(UNIT, ''));
+        let b = t + Number(ele.style.height.replace(UNIT, ''));
+        return { left: l, right: r, top: t, bottom: b };
+    }
+    function checkCollision() {
+        var playerRect = getRect(playerEle);
+        if (playerRect.bottom <= 0 || playerRect.top >= SCREEN_HEIGHT)
+            return false;
+        var walls = document.getElementsByName(WALL_TAG);
+        var removes = [];
+        for (let i = 0, len = walls.length; i < len; i++) {
+            var rect = getRect(walls[i]);
+            if (!(playerRect.right <= rect.left || playerRect.left >= rect.right ||
+                playerRect.top >= rect.bottom || playerRect.bottom <= rect.top)) {
+                return false;
+            }
+            if (rect.right <= 0) {
+                removes.push(walls[i]);
+            }
+        }
+        let removed = false;
+        for (let i = 0, len = removes.length; i < len; i++) {
+            screen.removeChild(removes[i]);
+            removed = true;
+        }
+        if (removed) {
+            score++;
+        }
+        return true;
+    }
+    function run(event) {
+        if (living) {
+            living = checkCollision()
+            playerControl(event);
+            playerEle.style.left = player.x + UNIT;
+            playerEle.style.top = player.y + UNIT;
+            wallMove();
+            if (wallTime == 0) {
+                createWall();
+                if (wallDelay > MIN_WALL_DELAY) {
+                    wallDelay = Math.max(wallDelay - DIFFICULT, MIN_WALL_DELAY);
+                }
+            }
+
+            wallTime += RATE;
+            if (wallTime >= wallDelay) {
+                wallTime -= wallDelay;
+            }
+        } else if (event) {
+            init();
+        }
+    }
+    game = setInterval(function () {
+        run(keyDown);
+        keyDown = false;
+    }, RATE);
+</script>
+
+</html>
