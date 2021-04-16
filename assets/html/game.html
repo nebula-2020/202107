@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="../css/def.css">
+    <script src='qrc:///qtwebchannel/qwebchannel.js'></script>
     <title>Document</title>
 
     <style type="text/css">
@@ -12,10 +13,11 @@
         body {
             height: 100%;
             width: 100%;
+            background-color: #000;
             overflow: hidden;
         }
 
-        #container {
+        .container {
             position: absolute;
             display: inline-block;
             top: 50%;
@@ -39,6 +41,7 @@
         #player {
             overflow: visible;
             line-height: 0;
+            transition: top, left, width, height 0.5s ease-in-out;
         }
 
         #player img {
@@ -48,10 +51,12 @@
             top: -20%;
             transform: none;
             position: absolute;
+            transition: width, height 0.5s ease-in-out;
         }
 
         *[name='wall'] {
             background: #000;
+            transition: top, left, width, height 0.25s ease-in-out;
         }
 
         *[name='wall'] * {
@@ -61,42 +66,76 @@
             background-size: contain;
             background-repeat: no-repeat repeat;
         }
+
+        #label {
+            color: #fff;
+            position: fixed;
+            display: inline-block;
+            left: 0;
+            top: 0;
+        }
+
+        .retry {
+            min-width: 10vmin;
+            min-height: 10vmin;
+            display: inline-block;
+            background-color: #fff;
+            color: #000;
+            text-align: center;
+            padding: 1vmin;
+            cursor: pointer;
+            border-radius: 0.5em;
+            padding: 0.5em;
+        }
     </style>
 </head>
 
 <body>
-    <div id="container">
+    <div id="container" class="container">
         <div id="screen">
             <div id="player">
                 <img src="../images/player.svg">
             </div>
         </div>
     </div>
+    <div id="label">
+    </div>
+    <div id="retry" class="container retry" style="display: none;">0</div>
 </body>
 <script>
+    /*====*====*====*====*====*====*====*====*====*====*====*====*====*/
+    window.onload = function () {
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            window.save = channel.objects.py.save;
+            window.autoControl = channel.objects.py.auto_control;
+        })
+    };
+    /*====*====*====*====*====*====*====*====*====*====*====*====*====*/
     document.οncοntextmenu = function () { return false; }
     const SCREEN_WIDTH = 960;
     const SCREEN_HEIGHT = 540;
-    const DIRECTION_EFFECT = -27;
-    const DIRECTION_ADDEND = .25;
-    const SPEED = 24;
-    const RATE = 10;
+    const DIRECTION_EFFECT = -900;
+    const DIRECTION_ADDEND = .01;
+    const SPEED = .3;
+    const RATE = 30;
     const WALL_WIDTH = 80;
-    const G = 10;
+    const G = 0.000001;
     const WALL_TAG = 'wall';
     const UNIT = 'px';
     const PLAYER_WIDTH = 444.4;
     const PLAYER_HEIGHT = 101.6;
     const PLAYER_SCALE = 0.4;
-    const MIN_WALL_DELAY = 4000;
-    const DEF_WALL_DELAY = 7500;
-    const DIFFICULT = 40;
+    const MIN_WALL_DELAY = 700;
+    const DEF_WALL_DELAY = 1000;
+    const DIFFICULT = 2;
     var screen = document.getElementById('screen');
     screen.style.width = SCREEN_WIDTH + UNIT;
     screen.style.height = SCREEN_HEIGHT + UNIT;
     var playerEle = document.getElementById('player');
     playerEle.style.width = (PLAYER_WIDTH * PLAYER_SCALE) + UNIT;
     playerEle.style.height = (PLAYER_HEIGHT * PLAYER_SCALE) + UNIT;
+    var retryBtn = document.getElementById('retry');
+    var infLabel = document.getElementById('label');
     var player = { x: 200, y: SCREEN_HEIGHT / 3, d: 0 };
     var keyDown = false;
     var game = null;
@@ -104,7 +143,10 @@
     var wallDelay;
     var wallTime;
     var score;
-    document.onmousedown = function (event) {
+    var data = [];
+    var passed = false;
+    var auto = false;
+    document.onclick = function (event) {
         var e = event || window.event || arguments.callee.caller.arguments[0];
         if (e && e.button) {
             if (game) {
@@ -118,25 +160,40 @@
             if (e.keyCode == 27) { // 按 Esc 
                 if (game) {
                     clearInterval(game);
+                    window.location.href = "../index.html"
                 }
+            } else if (e.keyCode == 65) { // 按 A
+                auto = !auto;
             } else {
                 keyDown = true
             }
     };
+    function playAgain() {
+        retryBtn.style.display = 'none';
+        init();
+    }
+    retryBtn.addEventListener('click', function () {
+        playAgain();
+    })
     function resize() {
         let scaleX = document.body.clientWidth / SCREEN_WIDTH;
         let scaleY = document.body.clientHeight / SCREEN_HEIGHT;
         let scale = (SCREEN_HEIGHT / SCREEN_WIDTH > document.body.clientHeight / document.body.clientWidth) ? scaleY : scaleX;
-        screen.style.transform = 'scale(' + scale + ',' + scale + ')';
+        let old = screen.style.transform;
+        let trans = 'scale(' + scale + ',' + scale + ')';
+        if (screen.style.transform != trans)
+            screen.style.transform = trans;
     }
     window.onresize = function () { resize(); };
     resize();
     function init() {
+        data = [];
         player = { x: 200, y: SCREEN_HEIGHT / 3, d: 0 };
         score = 0;
         wallTime = 0;
         wallDelay = DEF_WALL_DELAY;
         living = true;
+        passed = false;
         var walls = document.getElementsByName(WALL_TAG);
         while (walls.length > 0) {
             walls = document.getElementsByName(WALL_TAG);
@@ -144,9 +201,19 @@
         }
     }
     init();
+    function historySingle(playerY, playerFallVec, dToDoor, doorTop, doorBottom, label) {
+        return {
+            y: playerY,
+            v: playerFallVec,
+            d: dToDoor,
+            t: doorTop,
+            b: doorBottom,
+            l: label ? 1 : 0
+        }
+    }
     function createWall() {
         var height = 150;
-        var mid = Math.random() * (SCREEN_HEIGHT - height);
+        var mid = Math.random() * (SCREEN_HEIGHT - 2 * height) + height;
 
         var top = mid - height / 2;
         var bottom = mid + height / 2;
@@ -182,19 +249,24 @@
         screen.appendChild(bottomWall);
 
     }
+    function show() {
+        label.innerHTML = 'DIFFICULT: '
+            + ((1. - (MIN_WALL_DELAY - wallDelay) / (MIN_WALL_DELAY - DEF_WALL_DELAY)) * 100).toFixed(1)
+            + '%' + '<br/>' + 'SCORE: ' + score;
+    }
     function playerControl(event) {
         if (event) {
-            player.d = DIRECTION_EFFECT / RATE;
+            player.d = DIRECTION_EFFECT;
         } else {
-            player.y += G / RATE * Math.abs(player.d) * player.d / 2;
-            player.d += DIRECTION_ADDEND / RATE;
+            player.y += G * RATE * Math.abs(player.d) * player.d / 2;
+            player.d += RATE;
         }
     }
     function wallMove() {
         var walls = document.getElementsByName(WALL_TAG);
         for (let i = 0, len = walls.length; i < len; i++) {
             let left = Number(walls[i].style.left.replace(UNIT, ''));
-            left -= SPEED / RATE
+            left -= SPEED * RATE
             walls[i].style.left = left + UNIT;
         }
     }
@@ -205,52 +277,133 @@
         let b = t + Number(ele.style.height.replace(UNIT, ''));
         return { left: l, right: r, top: t, bottom: b };
     }
-    function checkCollision() {
+    function checkLiving() {
         var playerRect = getRect(playerEle);
         if (playerRect.bottom <= 0 || playerRect.top >= SCREEN_HEIGHT)
             return false;
         var walls = document.getElementsByName(WALL_TAG);
-        var removes = [];
         for (let i = 0, len = walls.length; i < len; i++) {
             var rect = getRect(walls[i]);
             if (!(playerRect.right <= rect.left || playerRect.left >= rect.right ||
                 playerRect.top >= rect.bottom || playerRect.bottom <= rect.top)) {
                 return false;
             }
+        }
+        return true;
+    }
+    function removeWall() {
+        var playerRect = getRect(playerEle);
+        var walls = document.getElementsByName(WALL_TAG);
+        var removes = [];
+        let pass = false;
+        let removed = false;
+        for (let i = 0, len = walls.length; i < len; i++) {
+            var rect = getRect(walls[i]);
+            if (rect.right < playerRect.left) {
+                pass = true;
+            }
             if (rect.right <= 0) {
                 removes.push(walls[i]);
             }
         }
-        let removed = false;
         for (let i = 0, len = removes.length; i < len; i++) {
             screen.removeChild(removes[i]);
             removed = true;
         }
-        if (removed) {
-            score++;
+        return { pass: pass, removed: removed };
+    }
+    function appendTempHistory() {
+        var playerRect = getRect(playerEle);
+        var walls = document.getElementsByName(WALL_TAG);
+        var list = []
+        for (let i = 0, len = walls.length; i < len; i++) {
+            var rect = getRect(walls[i]);
+            if (rect.right - playerRect.left >= 0) {
+                list.push(walls[i])
+            }
         }
-        return true;
+        if (list.length >= 2) {
+            list.sort(function (a, b) {
+                var rectA = getRect(a);
+                var rectB = getRect(b);
+                let da = rectA.right - playerRect.left;
+                let db = rectB.right - playerRect.left;
+                let ret = da - db;
+                if (ret == 0) {
+                    let ta = rectA.top;
+                    let tb = rectB.top;
+                    ret = ta - tb;
+                }
+                return ret;
+            });
+            var top = getRect(list[0]);
+            var bottom = getRect(list[1]);
+            var d = Math.min(top.left, bottom.left) - playerRect.left;
+            if (d < 0)
+                d += SCREEN_WIDTH;
+            return historySingle(player.y / SCREEN_HEIGHT, (player.d - DIRECTION_EFFECT) / SCREEN_HEIGHT,
+                d / SCREEN_WIDTH, top.bottom / SCREEN_HEIGHT, bottom.top / SCREEN_HEIGHT, keyDown)
+        }
+    }
+    function autoDrive() {
+        var ret = false;
+        var tmp = appendTempHistory();
+        if (tmp) {
+            var environment = [tmp];
+            window.autoControl(JSON.stringify(environment), function (arg) {
+                ret = arg;
+            })
+        }
+        return ret;
     }
     function run(event) {
         if (living) {
-            living = checkCollision()
-            playerControl(event);
-            playerEle.style.left = player.x + UNIT;
-            playerEle.style.top = player.y + UNIT;
+            let remRes = removeWall();//描述玩家是否刚好穿过一个门
+            if (keyDown || Math.random() < 1 / 32 * RATE) {
+                var tmp = appendTempHistory();
+                if (tmp)
+                    data.push(tmp);//必须先记录数据因为玩家控制会污染数据
+            }
+            if (remRes.pass && !passed) {
+                if (data.length > 0) {
+                    window.save(JSON.stringify(data));
+                    data = [];
+                }
+                score++;
+                passed = true;
+            }
+            if (remRes.removed) {
+                passed = false;
+            }
+            if (auto)
+                playerControl(autoDrive());
+            else
+                playerControl(event);
+            if (playerEle.style.left != player.x + UNIT)
+                playerEle.style.left = player.x + UNIT;
+            if (playerEle.style.top != player.y + UNIT)
+                playerEle.style.top = player.y + UNIT;
             wallMove();
+            show();
             if (wallTime == 0) {
                 createWall();
                 if (wallDelay > MIN_WALL_DELAY) {
-                    wallDelay = Math.max(wallDelay - DIFFICULT, MIN_WALL_DELAY);
+                    wallDelay = Math.max(wallDelay - DIFFICULT * RATE * SPEED, MIN_WALL_DELAY);
                 }
             }
 
-            wallTime += RATE;
+            wallTime += RATE * SPEED;
             if (wallTime >= wallDelay) {
-                wallTime -= wallDelay;
+                wallTime = 0;
             }
-        } else if (event) {
-            init();
+            living = checkLiving();
+        } else {
+            if (keyDown) {
+                playAgain()
+            } else {
+                retryBtn.innerHTML = score + '<br/>RETRY';
+                retryBtn.style.display = 'inline-block';
+            }
         }
     }
     game = setInterval(function () {
