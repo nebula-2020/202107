@@ -29,11 +29,19 @@ class Win(QtWidgets.QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 ##====##====##====##====##====##====##====##====##====##====##====##====##
-        self.setWindowTitle('Helicopter')
+        self.setWindowTitle('摔机大王')
+        self.resize(1280, 720)
         # pmp = QtGui.QPixmap('./assets/icons/icon.ico')
         icon = QtGui.QIcon()
         # icon.addPixmap(pmp, QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.setWindowIcon(icon)
+
+
+def init_splash():
+    img = QtGui.QPixmap('./assets/images/welcome.png')
+    img = img  .scaled(768, 432, QtCore.Qt.KeepAspectRatio)
+    splash = QtWidgets.QSplashScreen(img)
+    return splash
 
 
 if __name__ == '__main__':
@@ -46,8 +54,7 @@ if __name__ == '__main__':
         pass
     #
     app = QtWidgets.QApplication(sys.argv)
-    splash = QtWidgets.QSplashScreen(
-        QtGui.QPixmap('./assets/images/welcome.png'))
+    splash = init_splash()
     splash.show()
     # 可以显示启动信息
     # 关闭启动画面

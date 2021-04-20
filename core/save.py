@@ -41,7 +41,7 @@ class Save:
         path = os.path.join(self.__folder, self.__fileName)
         with tf.io.gfile.GFile(path, 'w') as file:
             data = json.dumps(self.__data)
-            print(data)
+            print('SAVE: %d' % len(self.__data))
             file.write(data)
             pass
         pass
@@ -82,7 +82,7 @@ class Save:
                 if len(res) != x_tag_len:
                     print(y)
                 x.append(res)
-                y.append([1,0]if ele[Save.__LABEL]>.5 else[0,1])
+                y.append([1, 0]if ele[Save.__LABEL] > .5 else[0, 1])
                 pass
             self.__index = end
         return x, y

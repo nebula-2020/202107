@@ -3,34 +3,60 @@
 from core.save import *
 import tensorflow as tf
 from tensorflow.keras import *
-import matplotlib.pyplot as pyp
-
+import winsound
+import time
+from threading import *
 MODEL_NAME = 'model'
+sigmoid = tf.nn.sigmoid
+relu = tf.nn.relu
+
+
+def beeps(times: int = 3, frequency: int = 5000, duration: float = 1., delay: float = .6):
+    for _ in range(abs(times)):
+        winsound.Beep(max(37, min(32767, abs(frequency))),
+                      int(abs(duration)*1000))
+        time.sleep(abs(delay))
+
+
+def beep(times: int = 3, frequency: int = 5000, duration: float = 1., delay: float = .6):
+    t = Thread(target=beeps, args=(times, frequency, duration, delay))
+    t.start()
+    return t
 
 
 def train():
     model = Sequential()
-    model.add(layers.Dense(units=6, input_shape=[6], activation='relu'))
-    model.add(layers.Dense(units=12, input_shape=[6], activation='relu'))
-    model.add(layers.Dense(units=12, input_shape=[12], activation='relu'))
-    model.add(layers.Dense(units=2, input_shape=[12], activation='sigmoid'))
+    model.add(layers.Dense(units=6, input_shape=[6], activation=relu))
+    model.add(layers.Dense(units=18, input_shape=[6], activation=relu))
+    model.add(layers.Dense(units=12, input_shape=[18], activation=relu))
+    model.add(layers.Dense(units=2, input_shape=[12], activation=sigmoid))
     opt = tf.optimizers.SGD(lr=0.1, decay=0, momentum=0.5)
     model.compile(optimizer=opt, loss='binary_crossentropy')
 
-    class haltCallback(callbacks.Callback):  # 自定义回调，给fit当作参数，没有回调也行
-        def on_epoch_end(self, epoch, logs={}):
-            if(logs.get('loss') <= 0.1):  # 当损失充分小的时候停止学习
-                self.model.stop_training = True
+    class HaltCallback(callbacks.Callback):  # 自定义回调，给fit当作参数，没有回调也行
+        last_avg = -1
 
-    cb = [haltCallback()]
+        losts = []
+
+        def on_epoch_end(self, epoch, logs={}):
+            HaltCallback.losts.append(logs.get('loss'))
+            avg = sum(HaltCallback.losts)/len(HaltCallback.losts)
+            print(avg)
+            if(logs.get('loss') <= 0.1 or (abs(avg - HaltCallback.last_avg) < 0.000001 and logs.get('loss') <= 0.15)):
+                model.stop_training = True
+            HaltCallback.last_avg = avg
+            if(len(HaltCallback.losts) > 20):
+                HaltCallback.losts.pop(0)
+
+    cb = [HaltCallback()]
     x, y = save.get_data(save.get_size()-1)
     x = tf.convert_to_tensor(x)
     y = tf.convert_to_tensor(y)
-    history = model.fit(x, y, epochs=10000, verbose=1, callbacks=cb)
-    lost = history.history['loss']  # 获取损失
+    history = model.fit(x, y, epochs=750, verbose=1, callbacks=cb)
+    # lost = history.history['loss']  # 获取损失
     model.save(MODEL_NAME)
-    pyp.plot(lost)
-    pyp.show()
+    beep()
+    return model
 
 
 def load():
