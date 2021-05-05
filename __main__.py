@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from core.form import Win
-from core.bridge import Bridge
 import sys
 import os
 import ctypes

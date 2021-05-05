@@ -4,7 +4,6 @@ import os
 import json
 from threading import *
 import tensorflow as tf
-import traceback
 import random
 
 

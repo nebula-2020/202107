@@ -1,7 +1,6 @@
 from core.nn import load, train
 from threading import Thread
 from core.save import *
-import sys
 from PyQt5 import QtCore, QtGui, QtWebChannel, QtWebEngineWidgets, QtWidgets
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings as Qws
 
