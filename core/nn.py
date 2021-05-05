@@ -8,7 +8,7 @@ import time
 from threading import *
 MODEL_NAME = 'model'
 sigmoid = tf.nn.sigmoid
-relu = tf.nn.relu
+relu = tf.nn.leaky_relu
 
 
 def beeps(times: int = 3, frequency: int = 5000, duration: float = 1., delay: float = .6):
@@ -29,7 +29,8 @@ def train():
     model.add(layers.Dense(units=6, input_shape=[6], activation=relu))
     model.add(layers.Dense(units=18, input_shape=[6], activation=relu))
     model.add(layers.Dense(units=12, input_shape=[18], activation=relu))
-    model.add(layers.Dense(units=2, input_shape=[12], activation=sigmoid))
+    model.add(layers.Dense(units=6, input_shape=[12], activation=relu))
+    model.add(layers.Dense(units=2, input_shape=[6], activation=sigmoid))
     opt = tf.optimizers.SGD(lr=0.1, decay=0, momentum=0.5)
     model.compile(optimizer=opt, loss='binary_crossentropy')
 
@@ -42,19 +43,22 @@ def train():
             HaltCallback.losts.append(logs.get('loss'))
             avg = sum(HaltCallback.losts)/len(HaltCallback.losts)
             print(avg)
-            if(logs.get('loss') <= 0.1 or (abs(avg - HaltCallback.last_avg) < 0.000001 and logs.get('loss') <= 0.15)):
+            if(logs.get('loss') <= 0.08 or (abs(avg - HaltCallback.last_avg) < 0.00001 and logs.get('loss') <= 0.15)):
                 model.stop_training = True
             HaltCallback.last_avg = avg
             if(len(HaltCallback.losts) > 20):
                 HaltCallback.losts.pop(0)
 
     cb = [HaltCallback()]
-    x, y = save.get_data(save.get_size()-1)
+    x, y = [], []
+    while x == [] or y == []:
+        x, y = save.get_data()
     x = tf.convert_to_tensor(x)
     y = tf.convert_to_tensor(y)
-    history = model.fit(x, y, epochs=750, verbose=1, callbacks=cb)
+    history = model.fit(x, y, epochs=2000, verbose=1, callbacks=cb)
     # lost = history.history['loss']  # 获取损失
     model.save(MODEL_NAME)
+    print('FINISH')
     beep()
     return model
 

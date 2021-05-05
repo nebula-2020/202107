@@ -5,6 +5,7 @@ import json
 from threading import *
 import tensorflow as tf
 import traceback
+import random
 
 
 class Save:
@@ -32,6 +33,51 @@ class Save:
                 pass
             pass
         pass
+        self.__data1 = []
+        for _ in range(1000):
+            self.__data1.append(  # 太低
+                {
+                    "y": random.random()+.98,
+                    "v": random.random()*1.05-.05,
+                    "d": random.random(),
+                    "t": random.random()*2-1,
+                    "b": random.random()*2-1,
+                    "l": 1
+                }
+            )
+        for _ in range(500):
+            self.__data1.append(  # 太高
+                {
+                    "y": random.random()*.05,
+                    "v": random.random()*-1,
+                    "d": random.random(),
+                    "t": random.random()*-1,
+                    "b": random.random(),
+                    "l": 1
+                }
+            )
+        for _ in range(1000):
+            self.__data1.append(  # 离门太低
+                {
+                    "y": random.random(),
+                    "v": random.random()*1.15-.15,
+                    "d": random.random()*.15,
+                    "t": random.random()*2-1,
+                    "b": random.random()*.2-.17,
+                    "l": 1
+                }
+            )
+        for _ in range(1000):
+            self.__data1.append(  # 门顶太近
+                {
+                    "y": random.random(),
+                    "v": random.random()*2-1,
+                    "d": random.random()*.15,
+                    "t": random.random()*.5+.5-.95,
+                    "b": random.random()*-1,
+                    "l": 0
+                }
+            )
     pass
 
     def save(self):
@@ -63,18 +109,16 @@ class Save:
         pass
 
     def get_size(self) -> int:
-        return len(self.__data)
+        return len(self.__data)+len(self.__data1)
 
-    def get_data(self, size: int) -> tuple:
+    def get_data(self) -> tuple:
         x = []
         y = []
         if len(self.__data) > 2:
-            end = self.__index+abs(size)
-            end = end % len(self.__data)
             xtags = [e for e in Save.__TAGS]
             xtags.remove(Save.__LABEL)
             x_tag_len = len(xtags)
-            for ele in self.__data[self.__index: end]:
+            for ele in self.__data:
                 res = []
                 for tag in xtags:
                     res.append(ele[tag])
@@ -84,7 +128,16 @@ class Save:
                 x.append(res)
                 y.append([1, 0]if ele[Save.__LABEL] > .5 else[0, 1])
                 pass
-            self.__index = end
+            for ele in self.__data1:
+                res = []
+                for tag in xtags:
+                    res.append(ele[tag])
+                    pass
+                if len(res) != x_tag_len:
+                    print(y)
+                x.append(res)
+                y.append([1, 0]if ele[Save.__LABEL] > .5 else[0, 1])
+                pass
         return x, y
 
     @staticmethod

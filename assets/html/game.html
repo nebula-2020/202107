@@ -167,11 +167,23 @@
             y: playerY,
             v: playerFallVec,
             d: dToDoor,
+            t: doorTop - playerY,
+            b: doorBottom - playerY,
+            l: label ? 1 : 0
+        }
+    }
+    /*
+    function saveSingle(playerY, playerFallVec, dToDoor, doorTop, doorBottom, label) {
+        return {
+            y: playerY,
+            v: playerFallVec,
+            d: dToDoor,
             t: doorTop,
             b: doorBottom,
             l: label ? 1 : 0
         }
     }
+    */
     function getRect(obj) {
         return {
             left: obj[X],
@@ -218,7 +230,8 @@
         var score = 0;
         var status = undefined;
         var autoSign = false;
-        const QUEUE_SIZE = 500;
+        var lastPress = 0;
+        const QUEUE_SIZE = 5000;
         var init = function () {
             g = newGame(SCREEN_WIDTH, SCREEN_HEIGHT, 150, 180, PLAYER_WIDTH, PLAYER_HEIGHT, 80, DOOR_HEIGHT,
                 300, 200, 10, 4, DIRECTION_EFFECT, 0.06);
@@ -229,7 +242,7 @@
             g.run(false);
             status = g.next();
             autoSign = true;
-
+            lastPress = 0;
         }
         init();
         document.onclick = function (event) {
@@ -286,8 +299,11 @@
                             living = status[PLAYER_TAG][LIVING];
                         }
                     } else {
-                        if (window.keyDown || Math.random() >= .95)
+                        lastPress++;
+                        if (window.keyDown || (lastPress >= 8 && Math.random() >= .5)) {
                             data.push(appendData(status[PLAYER_TAG], status[WALLS_TAG], window.keyDown));
+                            lastPress = 0;
+                        }
                         g.run(window.keyDown);
                         status = g.next();
                         if (status[PLAYER_TAG][LIVING])

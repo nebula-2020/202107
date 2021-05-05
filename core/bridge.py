@@ -24,7 +24,8 @@ class Bridge(QtCore.QObject):
         json_array = json.loads(j)
         if self.__model:
             ret = self.__model.predict(Save.to_data(json_array))
-            print('%s, %s: %s' % (ret[0][0], ret[0][1], ret[0][0] > ret[0][1]))
+            print('%s:: %s, %s:: %s' %
+                  (j, ret[0][0], ret[0][1], ret[0][0] > ret[0][1]))
             ret = ret[0][0] > ret[0][1]
         else:
             return False
