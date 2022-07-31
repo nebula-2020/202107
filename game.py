@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """游戏环境相关。
 """
+import json
 import random
 import sys
 import pygame
@@ -177,6 +178,7 @@ class Game:
         door_distance=100,
         max_falling_speed: int = 100,
         without_screen=False,
+        **kwargs
     ):
         self.player = GameObject(
             cx=screen_size[0]/4,
@@ -216,7 +218,7 @@ class Game:
         """距离玩家最近的且玩家未穿过的门。
         """
         for door in self.doors:
-            if door.living:
+            if door.right >= self.player.left:
                 return door
         return None
 
@@ -229,7 +231,7 @@ class Game:
             屏幕右侧随机位置的门。
         """
         door = GameObject(
-            cx=self.screen_size[0],
+            cx=self.screen_size[0]+self.door_size[0]/2,
             cy=random.randint(
                 self.door_size[1]/2,
                 self.screen_size[1]-self.door_size[1]/2
@@ -281,9 +283,9 @@ class Game:
     @staticmethod
     def __shot(door: Box, player: Box, screen_size: 'tuple[int,int]', speed_scale: int) -> 'list[float]':
         return [
-            (door.x-player.x)/screen_size[0],
+            (door.right-player.left)/screen_size[0],
             (player.y-door.y)/screen_size[-1],
-            player.y/screen_size[-1],
+            # (player.y-screen_size[-1]/2)/screen_size[-1]/2,
             player.speed_y/speed_scale,
         ]
 
@@ -351,6 +353,7 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode(SCREEN_SIZE)
     fcclock = pygame.time.Clock()  # 创建一个时间对象
     game = Game(**GAME_CONFIG)
+    data = []
     while True:  # 循环，直到接收到窗口关闭事件
         for event in pygame.event.get():  # 处理事件
             if event.type == pygame.QUIT:  # 接收到窗口关闭事件
@@ -359,15 +362,22 @@ if __name__ == "__main__":
         keys = pygame.key.get_pressed()
         if keys[pygame.K_ESCAPE]:
             pygame.quit()
-            sys.exit()
+            break
         elif keys[pygame.K_SPACE] or keys[pygame.K_UP]:
-            A = True
+            action = True
         else:
-            A = False
-        game.step(A)
+            action = False
+        state = game.shot()
+        game.step(action)
+        next_state = game.shot()
+        reward = game.playing
+        data.append([state, [float(action), ], [float(reward), ], next_state])
         pygame.display.set_caption(f'SCORE: {game.score}')  # 设置窗口标题
         game.draw(screen)
         fcclock.tick(FPS)  # 卡时间
         pygame.display.update()
+        print(game.score)
         if not game.playing:
             game = Game(**GAME_CONFIG)
+    with open('./out/data.json', 'w') as file:
+        file.write(json.dumps(data))

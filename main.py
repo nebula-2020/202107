@@ -22,7 +22,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.layers = nn.ModuleDict({
             'c': nn.Sequential(
-                nn.Linear(4, 12, device=CUDA),
+                nn.Linear(3, 12, device=CUDA),
                 nn.Sigmoid(),
             ),
             'a': nn.Linear(12, 2, device=CUDA),
@@ -74,8 +74,12 @@ class Model(nn.Module):
 
 
 def simulate(
-    model: Model, batch_size: int, epslion: float = .1, **env_args
-) -> 'tuple[list,float,float]':
+    model: Model,
+    batch_size: int,
+    epslion: float = .1,
+    eval_step: int = None,
+    env_args: dict = None
+) -> 'tuple[list,float,int]':
     """模拟游戏过程并收集数据。
 
     Parameters
@@ -86,19 +90,23 @@ def simulate(
         收集数据总条数
     epslion : float, optional
         尝试比例, by default .1
+    eval_step : int, optional
+        模型将控制游戏的最大步数，参与模型评估, by default `batch_size`
+    env_args : dict, optional
+        环境初始化参数, by default None
 
     Returns
     -------
-    tuple[list,float,float]
-        采集的数据, 平均存活时长
+    tuple[list,float,int]
+        采集的数据, 平均存活时长, 无探索情况下生存时间
     """
     cache = []
     env = Game(**env_args, without_screen=True)
-    live_times = []
-    live_time = 0
-    for i in range(batch_size):
+    livetimes = []
+    livetime = 0
+    for _ in range(batch_size):
         state = env.shot()
-        if random.random()*(i/batch_size)**2 <= epslion:
+        if random.random() <= epslion:
             action_index = random.randint(0, len(ACTIONS)-1)
         else:
             values = model(torch.tensor(state, device=CUDA))
@@ -110,10 +118,22 @@ def simulate(
         cache.append((state, action_index, next_state, reward))
         if not env.playing:
             env = Game(**env_args, without_screen=True)
-            live_times.append(live_time)
+            livetimes.append(livetime)
         else:
-            live_time += 1
-    return cache, sum(live_times)/max(1, len(live_times))/batch_size,
+            livetime += 1
+    env = Game(**env_args, without_screen=True)
+    max_step = eval_step or batch_size
+    livetime = 0
+    for _ in range(max_step):
+        state = env.shot()
+        values = model(torch.tensor(state, device=CUDA))
+        action_index = values.argmax(-1)
+        jump = ACTIONS[action_index]
+        env.step(jump)
+        if not env.playing:
+            break
+        livetime += 1
+    return cache, sum(livetimes)/max(1, len(livetimes))/batch_size, livetime
 
 
 def train(
@@ -122,13 +142,14 @@ def train(
     loss_func: 'nn._Loss',
     epochs: int,
     batch_size: int,
+    cache_size: int,
     epslion: float = .1,
     gamma: float = .5,
     update_ratio: float = .5,
+    eval_step: int = None,
     target_accuracy=.99,
-    noise: float = .01,
-    env_args: dict = None
-) -> 'tuple[Model,list[float],list[float]]':
+    env_args: dict = None,
+) -> 'tuple[Model,list[float],list[float],list[int]]':
     """训练模型。
 
     Parameters
@@ -156,23 +177,29 @@ def train(
 
     Returns
     -------
-    tuple[Model,list[float],list[float]]
+    tuple[Model,list[float],list[float],list[int]]
         目标网络, 损失, 得分
     """
     target_net = Model()
     target_net.load_params(policy_net)
     policy_net.train(mode=True)
     target_net.train(mode=False)
-    cache, loss_vals, accuracies = [], [], []
+    loss_vals, accuracies, livetimes, cache = [], [], [], []
     for epoch in range(epochs):
         target_net.load_params(policy_net, update_ratio)
-        batch, accuracy = simulate(
-            target_net, batch_size, epslion, **env_args
+        batch, accuracy, livetime = simulate(
+            model=target_net,
+            batch_size=batch_size,
+            epslion=epslion,
+            eval_step=eval_step,
+            env_args=env_args
         )
-        if accuracy >= target_accuracy:
+        accuracies.append(accuracy)
+        livetimes.append(livetime)
+        if livetime/(eval_step or batch_size) >= target_accuracy:
             break
         cache.extend(batch)
-        accuracies.append(accuracy)
+        cache = cache[-cache_size:]
         states, actions, nexts, rewards = [], [], [], []
         for state, action, next_state, reward in random.sample(cache, batch_size):
             states.append(state)
@@ -180,14 +207,12 @@ def train(
             rewards.append(reward)
             nexts.append(next_state)
         states = torch.tensor(states, device=CUDA)
-        states = states*(1-noise)+torch.randn_like(states)*noise
         actions = torch.tensor(actions, device=CUDA).unsqueeze(-1)
         rewards = torch.tensor(rewards, device=CUDA)
         nexts = torch.tensor(nexts, device=CUDA)
         v_target = target_net.forward(nexts).detach()
         y_target = v_target.max(dim=-1).values * gamma
         y_target += rewards * (1-gamma)
-        y_target *= rewards.ne(torch.zeros_like(rewards))
         v_eval = policy_net.forward(states)
         y_eval = v_eval.gather(index=actions, dim=-1)
         loss = loss_func(y_eval, y_target)
@@ -196,20 +221,25 @@ def train(
         opt.step()
         loss = loss.item()
         loss_vals.append(loss)
-        print_bar(epoch+1, epochs, ("%.10f" % loss, '%.10f' % accuracy))
-    return target_net, loss_vals, accuracies
+        print_bar(
+            epoch+1,
+            epochs,
+            ("%.10f" % loss, '%.10f' % accuracy, livetime),
+        )
+    return target_net, loss_vals, accuracies, livetimes
 
 
 np.set_printoptions(suppress=True)
 CUDA = torch.device("cuda")
 MODEL = Model()
-OPT = optim.Adam(MODEL.parameters(), lr=.07)
+OPT = optim.Adam(MODEL.parameters(), lr=.01)
 LOSS_FUNCTION = nn.MSELoss()
 ACTIONS = (True, False)
 SCREEN_SIZE = (800, 600)
 FPS = 20
 GAME_CONFIG = {
     'screen_size': SCREEN_SIZE,
+    'door_size': (80, 180),
     'speed': 10,
     'jump_force': 3,
     'g': 2,
@@ -217,24 +247,27 @@ GAME_CONFIG = {
 }
 if __name__ == "__main__":
     pygame.init()  # 初始化
-    model, loss_vals, accuracies = train(
+    model, loss_vals, accuracies, livetimes = train(
         policy_net=MODEL,
         opt=OPT,
         loss_func=LOSS_FUNCTION,
-        epochs=5000,
+        epochs=20000,
         batch_size=192,
+        cache_size=2000,
         epslion=.3,
-        gamma=.5,
+        gamma=.9,
         update_ratio=.1,
-        target_accuracy=.8,
+        target_accuracy=.95,
         env_args=GAME_CONFIG,
+        eval_step=1200,
     )
     plot(
         data={
             'loss': loss_vals,
             'accuracy': accuracies,
+            'livetimes': livetimes,
         },
-        colors=['#f80', '#08f']
+        colors=['#f80', '#08f', '#f08']
     )
 
     print('\n\n')
