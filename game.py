@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """游戏环境相关。
 """
-import json
 import random
 import sys
 import pygame
@@ -178,7 +177,7 @@ class Game:
         door_distance=100,
         max_falling_speed: int = 100,
         without_screen=False,
-        **kwargs
+        **_
     ):
         self.player = GameObject(
             cx=screen_size[0]/4,
@@ -290,6 +289,13 @@ class Game:
         ]
 
     def shot(self) -> 'list[float]':
+        """组装并返回当前游戏环境状态。
+
+        Returns
+        -------
+        list[float]
+            模型所需的多元组。
+        """
         return Game.__shot(
             self.door,
             self.player,
@@ -367,11 +373,8 @@ if __name__ == "__main__":
             action = True
         else:
             action = False
-        state = game.shot()
         game.step(action)
-        next_state = game.shot()
         reward = game.playing
-        data.append([state, [float(action), ], [float(reward), ], next_state])
         pygame.display.set_caption(f'SCORE: {game.score}')  # 设置窗口标题
         game.draw(screen)
         fcclock.tick(FPS)  # 卡时间
@@ -379,5 +382,3 @@ if __name__ == "__main__":
         print(game.score)
         if not game.playing:
             game = Game(**GAME_CONFIG)
-    with open('./out/data.json', 'w') as file:
-        file.write(json.dumps(data))

@@ -1,5 +1,17 @@
 # 设计稿
 
+## 环境
+
+运行命令查询环境信息：
+
+```shell
+python --version
+pip freeze > requirements.txt
+```
+
+* Python 3.9.12
+* [requirements.txt](./requirements.txt)
+
 ## 问题分析
 
 ### 应该统计哪些量
